@@ -1,7 +1,12 @@
 ﻿import axios from "axios";
 import { config } from "../data";
 
-const baseURL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+// In production, keep API calls on the admin site's origin so browsers can
+// send the HTTP-only refresh cookie. Netlify proxies /api to the backend.
+// Vite's development proxy handles the same relative /api paths locally.
+const baseURL = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")
+  : "";
 export const USE_MOCK_API = String(import.meta.env.VITE_USE_MOCK_API ?? "false").toLowerCase() !== "false";
 
 export const apiClient = axios.create({
