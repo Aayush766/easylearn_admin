@@ -22,7 +22,7 @@ This package contains the corrected Admin/Super Admin portal built from the supp
 Default:
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000
+VITE_API_BASE_URL=https://easylearn-server.onrender.com
 VITE_USE_MOCK_API=true
 ```
 

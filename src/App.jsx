@@ -10,6 +10,7 @@ import ProfilePage from "./admin/pages/ProfilePage";
 import CoursesPage from "./admin/pages/CoursesPage";
 import CategoriesPage from "./admin/pages/CategoriesPage";
 import ModulesPage from "./admin/pages/ModulesPage";
+import CourseContentPage from "./admin/pages/CourseContentPage";
 import LearnersPage from "./admin/pages/LearnersPage";
 import TrainersPage from "./admin/pages/TrainersPage";
 import TrainerAssignmentPage from "./admin/pages/TrainerAssignmentPage";
@@ -27,6 +28,7 @@ const operational = [
   ["courses", CoursesPage],
   ["categories", CategoriesPage],
   ["modules", ModulesPage],
+  ["course-content", CourseContentPage],
   ["learners", LearnersPage],
   ["trainers", TrainersPage],
   ["trainer-assignment", TrainerAssignmentPage],

@@ -2,9 +2,11 @@
 
 export async function uploadAdminMedia(file, resourceType = "image") {
   if (!file) throw new Error("Choose a file to upload.");
-  if (!["image", "video"].includes(resourceType)) throw new Error("Unsupported media type.");
+  if (!["image", "video", "raw"].includes(resourceType)) throw new Error("Unsupported media type.");
+  const extension = resourceType === "raw" ? String(file.name.split(".").pop() || "").toLowerCase() : "";
+  if (resourceType === "raw" && !extension) throw new Error("The selected document must have a file extension.");
 
-  const signedResponse = await apiClient.post("/api/uploads/signature", {});
+  const signedResponse = await apiClient.post("/api/uploads/signature", { resourceType, extension });
   const signed = signedResponse.data?.data ?? signedResponse.data;
   if (!signed?.cloudName || !signed.apiKey || !signed.timestamp || !signed.folder || !signed.publicId || !signed.signature) {
     throw new Error("The server returned an incomplete Cloudinary upload signature.");

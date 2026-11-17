@@ -5,7 +5,7 @@ import {
   Bell, BookOpen, CalendarClock, ChartNoAxesCombined, ClipboardCheck,
   CreditCard, FileBadge2, FileQuestion, GraduationCap, History, Layers3, BarChart3,
   LayoutDashboard, LogOut, Menu, Palette, Settings2, Tags,
-  UserCircle, UserCog, UserRoundCheck, Users, X
+  UserCircle, UserCog, UserRoundCheck, Users, Upload, X
 } from "lucide-react";
 import "./AdminLayout.css";
 import { readEntity, writeDemo } from "../services/localStore";
@@ -36,6 +36,7 @@ const coreNavigation = [
 const operationsNavigation = [
   ["Categories", "categories", Tags],
   ["Modules & Lessons", "modules", Layers3],
+  ["Course Content", "course-content", Upload],
   ["Trainer Assignment", "trainer-assignment", UserRoundCheck],
   ["Extension & Renewal", "renewals", CalendarClock],
 ];
