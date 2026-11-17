@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ImagePlus, Plus, Save, Trash2, Video } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Eye, ImagePlus, Monitor, Plus, Save, Smartphone, Trash2, Video, X } from "lucide-react";
 import { apiClient } from "../services/api";
 import { uploadAdminImage, uploadAdminVideo } from "../services/upload";
 
@@ -9,10 +9,22 @@ const textFields = [
   ["brandSecond", "Brand second part"],
   ["heroTitle", "Hero title"],
   ["heroAccent", "Hero accent"],
+  ["heroEyebrow", "Hero eyebrow"],
   ["heroDescription", "Hero description", "textarea"],
+  ["heroButtonLabel", "Hero button label"],
+  ["heroSecondaryButtonLabel", "Secondary hero button label"],
+  ["coursesEyebrow", "Courses eyebrow"],
   ["supportEmail", "Support email", "email"],
   ["phone", "Phone"],
   ["address", "Address", "textarea"],
+  ["headerLoginText", "Header login button label"],
+  ["footerDescription", "Footer description", "textarea"],
+  ["coursesTitle", "Courses section heading"],
+  ["coursesDescription", "Courses section description", "textarea"],
+  ["videosTitle", "Videos section heading"],
+  ["videosDescription", "Videos section description", "textarea"],
+  ["testimonialsTitle", "Testimonials section heading"],
+  ["testimonialsDescription", "Testimonials section description", "textarea"],
 ];
 
 const collectionFields = {
@@ -24,7 +36,7 @@ const collectionFields = {
 const sectionTypes = ["hero", "content", "cards", "media", "testimonials", "contact"];
 
 function newSection(type = "content") {
-  return { type, title: "", description: "", image: "", mediaUrl: "", buttonLabel: "", buttonUrl: "" };
+  return { type, navLabel: "", eyebrow: "", title: "", description: "", image: "", video: "", ctaText: "", ctaHref: "", items: [] };
 }
 
 function objectValue(value) {
@@ -40,8 +52,8 @@ function validateContent(value) {
   for (const key of ["sections", "courses", "videos", "testimonials"]) {
     if (value[key] !== undefined && !Array.isArray(value[key])) return `${key} must be an array.`;
   }
-  const urls = [value.logo, ...(value.sections || []).flatMap(section => [section?.image, section?.mediaUrl]), ...(value.courses || []).map(item => item?.image), ...(value.videos || []).flatMap(item => [item?.url, item?.thumbnail]), ...(value.testimonials || []).map(item => item?.image)].map(urlValue).filter(Boolean);
-  if (urls.some(url => typeof url !== "string" || !/^https:\/\//i.test(url))) return "Media links must use secure HTTPS URLs.";
+  const urls = [value.logo, value.heroImage, value.heroButtonUrl, value.heroSecondaryButtonUrl, ...(value.sections || []).flatMap(section => [section?.image, section?.video, section?.videoPoster, section?.ctaHref, ...(section?.items || []).flatMap(item => [item?.image, item?.video, item?.videoPoster, item?.ctaHref])]), ...(value.courses || []).flatMap(item => [item?.image, item?.url]), ...(value.videos || []).flatMap(item => [item?.url, item?.thumbnail]), ...(value.testimonials || []).map(item => item?.image)].map(urlValue).filter(Boolean);
+  if (urls.some(url => typeof url !== "string" || !/^(https:\/\/|\/|#)/i.test(url))) return "Use secure HTTPS media links or a site-relative path or anchor.";
   return "";
 }
 
@@ -55,19 +67,35 @@ export default function LandingPageEditor() {
   const [error, setError] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [jsonDraft, setJsonDraft] = useState("{}");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState("desktop");
+  const [previewSource, setPreviewSource] = useState("draft");
+  const [frameReady, setFrameReady] = useState(false);
+  const previewFrame = useRef(null);
+  const previewKey = useRef(crypto.randomUUID());
 
   const sections = Array.isArray(content.sections) ? content.sections.map(objectValue) : [];
   const courses = Array.isArray(content.courses) ? content.courses : [];
   const videos = Array.isArray(content.videos) ? content.videos : [];
   const testimonials = Array.isArray(content.testimonials) ? content.testimonials : [];
   const logo = urlValue(content.logo);
-  const previewTitle = [content.heroTitle, content.heroAccent].filter(Boolean).join(" ");
 
   useEffect(() => {
     let active = true;
-    apiClient.get("/api/landing").then(response => {
+    apiClient.get("/api/landing/manage").then(response => {
       if (!active) return;
-      const value = objectValue(response.data?.data?.content);
+      const value = objectValue(response.data?.data?.draftContent || response.data?.data?.content);
+      if (typeof value.logo === "string") value.logo = { url: value.logo };
+      if (Array.isArray(value.sections)) value.sections = value.sections.map(section => {
+        const entry = objectValue(section);
+        return {
+          ...entry,
+          video: entry.video || entry.mediaUrl || "",
+          ctaText: entry.ctaText || entry.buttonLabel || "",
+          ctaHref: entry.ctaHref || entry.buttonUrl || "",
+          items: Array.isArray(entry.items) ? entry.items : [],
+        };
+      });
       setContent(value);
       setLoadError("");
     }).catch(requestError => { if (active) setLoadError(requestError.message || "Could not load the published landing content."); })
@@ -76,6 +104,38 @@ export default function LandingPageEditor() {
   }, []);
 
   const previewSections = sections.filter(section => section && typeof section === "object");
+  const publicSiteUrl = import.meta.env.VITE_PUBLIC_SITE_URL || "http://localhost:5173";
+  let previewUrl = "";
+  try {
+    const url = new URL(publicSiteUrl);
+    url.searchParams.set("pelPreview", "1");
+    url.searchParams.set("previewKey", previewKey.current);
+    url.searchParams.set("parentOrigin", window.location.origin);
+    previewUrl = url.toString();
+  } catch { /* An invalid optional site URL leaves the preview unavailable. */ }
+
+  useEffect(() => {
+    if (!previewOpen || !previewUrl) return undefined;
+    const targetOrigin = new URL(previewUrl).origin;
+    const frameWindow = previewFrame.current?.contentWindow;
+    if (!frameWindow) return undefined;
+    const onPreviewReady = event => {
+      if (event.source !== frameWindow || event.origin !== targetOrigin || event.data?.type !== "PEL_LANDING_PREVIEW_READY" || event.data?.key !== previewKey.current) return;
+      setFrameReady(true);
+    };
+    window.addEventListener("message", onPreviewReady);
+    if (!frameReady) return () => window.removeEventListener("message", onPreviewReady);
+    const message = { key: previewKey.current };
+    if (previewSource === "draft") {
+      const draft = { ...content, logo: typeof content.logo === "string" ? { url: content.logo } : content.logo };
+      frameWindow.postMessage({ ...message, type: "PEL_LANDING_PREVIEW_DRAFT", content: draft }, targetOrigin);
+    } else if (previewSource === "default") {
+      frameWindow.postMessage({ ...message, type: "PEL_LANDING_PREVIEW_DEFAULT" }, targetOrigin);
+    } else {
+      frameWindow.postMessage({ ...message, type: "PEL_LANDING_PREVIEW_PUBLISHED" }, targetOrigin);
+    }
+    return () => window.removeEventListener("message", onPreviewReady);
+  }, [content, frameReady, previewOpen, previewSource, previewUrl]);
 
   function updateRoot(key, value) {
     setContent(current => ({ ...current, [key]: value }));
@@ -87,6 +147,10 @@ export default function LandingPageEditor() {
     setContent(current => ({ ...current, sections: (Array.isArray(current.sections) ? current.sections : []).map((section, position) => position === index ? { ...section, ...patch } : section) }));
     setError("");
     setNotice("");
+  }
+
+  function updateSectionItem(sectionIndex, itemIndex, patch) {
+    updateSection(sectionIndex, { items: (sections[sectionIndex]?.items || []).map((item, position) => position === itemIndex ? { ...item, ...patch } : item) });
   }
 
   function updateItem(collection, index, patch) {
@@ -140,7 +204,7 @@ export default function LandingPageEditor() {
     setError("");
   }
 
-  async function save() {
+  async function save(action = "publish") {
     let payload = content;
     if (advanced) {
       try { payload = JSON.parse(jsonDraft); }
@@ -152,11 +216,13 @@ export default function LandingPageEditor() {
     setError("");
     setNotice("");
     try {
-      const response = await apiClient.put("/api/landing", payload);
-      const saved = objectValue(response.data?.data?.content || payload);
+      const response = await apiClient.put("/api/landing", { content: payload, action });
+      const responseData = response.data?.data || {};
+      const saved = objectValue(action === "save-draft" ? responseData.draftContent || payload : responseData.content || payload);
       setContent(saved);
+      if (action === "publish") window.dispatchEvent(new CustomEvent("pel-branding-updated", { detail: saved }));
       if (advanced) setJsonDraft(JSON.stringify(saved, null, 2));
-      setNotice("Landing page content saved and published.");
+      setNotice(action === "save-draft" ? "Draft saved. The live landing page has not changed." : "Landing page content saved and published.");
     } catch (saveError) {
       setError(saveError.message || "Could not save landing page content.");
     } finally {
@@ -200,7 +266,7 @@ export default function LandingPageEditor() {
   return <section className="page">
     <header className="page-head">
       <div><p>Prime Easy Learn · Platform</p><h1>Landing page editor</h1><span>Edit and publish the public landing page content and media.</span></div>
-      <button className="primary" disabled={saving || Boolean(uploading) || Boolean(loadError)} onClick={save}><Save size={16} /> {saving ? "Publishing…" : "Save and publish"}</button>
+      <div className="landing-editor-actions"><button className="secondary" disabled={saving || Boolean(uploading) || Boolean(loadError)} onClick={() => save("save-draft")}><Save size={15} /> {saving ? "Saving…" : "Save draft"}</button><button className="primary" disabled={saving || Boolean(uploading) || Boolean(loadError)} onClick={() => save("publish")}><Save size={16} /> {saving ? "Publishing…" : "Publish changes"}</button></div>
     </header>
     {loadError && <div className="login-error" role="alert">{loadError} <button type="button" className="text-button" onClick={() => window.location.reload()}>Reload editor</button></div>}
     {error && <p className="login-error" role="alert">{error}</p>}
@@ -215,7 +281,14 @@ export default function LandingPageEditor() {
               {textFields.map(([key, label, type]) => <label className="field" key={key}>{label}{type === "textarea"
                 ? <textarea rows={3} value={content[key] || ""} onChange={event => updateRoot(key, event.target.value)} />
                 : <input type={type || "text"} value={content[key] || ""} onChange={event => updateRoot(key, event.target.value)} />}</label>)}
-              {renderMediaField({ label: "Logo", value: logo, targetKey: "logo", onChange: value => updateRoot("logo", value) })}
+              <label className="field">Hero button link<input type="url" value={content.heroButtonUrl || ""} onChange={event => updateRoot("heroButtonUrl", event.target.value)} placeholder="https://..." /></label>
+              <label className="field">Secondary hero button link<input type="url" value={content.heroSecondaryButtonUrl || ""} onChange={event => updateRoot("heroSecondaryButtonUrl", event.target.value)} placeholder="https://... or #section" /></label>
+              {renderMediaField({ label: "Hero image", value: content.heroImage, targetKey: "hero-image", onChange: value => updateRoot("heroImage", value) })}
+              <label className="field">Primary brand color<input type="color" value={/^#[0-9a-f]{6}$/i.test(content.primaryColor || "") ? content.primaryColor : "#1769FF"} onChange={event => updateRoot("primaryColor", event.target.value)} /></label>
+              <label className="field">Accent color<input type="color" value={/^#[0-9a-f]{6}$/i.test(content.accentColor || "") ? content.accentColor : "#16A085"} onChange={event => updateRoot("accentColor", event.target.value)} /></label>
+              <label className="field">Page background<input type="color" value={/^#[0-9a-f]{6}$/i.test(content.backgroundColor || "") ? content.backgroundColor : "#F8FAFF"} onChange={event => updateRoot("backgroundColor", event.target.value)} /></label>
+              <label className="field">Page text color<input type="color" value={/^#[0-9a-f]{6}$/i.test(content.textColor || "") ? content.textColor : "#172033"} onChange={event => updateRoot("textColor", event.target.value)} /></label>
+              {renderMediaField({ label: "Website logo", value: logo, targetKey: "logo", onChange: value => updateRoot("logo", { url: value }) })}
             </div>
           </section>
 
@@ -227,10 +300,25 @@ export default function LandingPageEditor() {
                 <label className="field">Section type<select value={section.type || "content"} onChange={event => updateSection(index, { type: event.target.value })}>{sectionTypes.map(type => <option key={type} value={type}>{type[0].toUpperCase() + type.slice(1)}</option>)}</select></label>
                 <label className="field">Heading<input value={section.title || ""} onChange={event => updateSection(index, { title: event.target.value })} /></label>
                 <label className="field landing-span-2">Description<textarea rows={3} value={section.description || ""} onChange={event => updateSection(index, { description: event.target.value })} /></label>
+                <label className="field">Navigation label<input value={section.navLabel || ""} onChange={event => updateSection(index, { navLabel: event.target.value })} /></label>
+                <label className="field">Eyebrow<input value={section.eyebrow || ""} onChange={event => updateSection(index, { eyebrow: event.target.value })} /></label>
                 {renderMediaField({ label: "Section image", value: section.image, targetKey: `section-${index}-image`, onChange: value => updateSection(index, { image: value }) })}
-                {section.type === "media" && renderMediaField({ label: "Video or media URL", value: section.mediaUrl, targetKey: `section-${index}-media`, resourceType: "video", onChange: value => updateSection(index, { mediaUrl: value }) })}
-                <label className="field">Button label<input value={section.buttonLabel || ""} onChange={event => updateSection(index, { buttonLabel: event.target.value })} /></label>
-                <label className="field">Button link<input type="url" value={section.buttonUrl || ""} onChange={event => updateSection(index, { buttonUrl: event.target.value })} placeholder="https://..." /></label>
+                {renderMediaField({ label: "Section video", value: section.video, targetKey: `section-${index}-video`, resourceType: "video", onChange: value => updateSection(index, { video: value }) })}
+                <label className="field">Button label<input value={section.ctaText || ""} onChange={event => updateSection(index, { ctaText: event.target.value })} /></label>
+                <label className="field">Button link<input type="url" value={section.ctaHref || ""} onChange={event => updateSection(index, { ctaHref: event.target.value })} placeholder="https://..." /></label>
+                <label className="field">Section background<input type="color" value={/^#[0-9a-f]{6}$/i.test(section.backgroundColor || "") ? section.backgroundColor : "#ffffff"} onChange={event => updateSection(index, { backgroundColor: event.target.value })} /></label>
+                <label className="field">Section text color<input type="color" value={/^#[0-9a-f]{6}$/i.test(section.textColor || "") ? section.textColor : "#172033"} onChange={event => updateSection(index, { textColor: event.target.value })} /></label>
+              </div>
+              <div className="landing-section-items">
+                <div className="landing-panel-heading"><div><b>Cards and items</b><p>Optional content cards displayed inside this section.</p></div><button type="button" className="secondary" onClick={() => updateSection(index, { items: [...(section.items || []), {}] })}><Plus size={14} /> Add item</button></div>
+                {(section.items || []).map((item, itemIndex) => <div className="landing-section-item" key={`section-${index}-item-${itemIndex}`}>
+                  <div className="landing-panel-heading"><b>Item {itemIndex + 1}</b><button type="button" className="icon-button danger" aria-label={`Remove item ${itemIndex + 1}`} onClick={() => updateSection(index, { items: section.items.filter((_, position) => position !== itemIndex) })}><Trash2 size={15} /></button></div>
+                  <div className="landing-form-grid">
+                    {[["title", "Title"], ["name", "Name"], ["description", "Description"], ["text", "Text"], ["meta", "Detail"], ["price", "Price"], ["ctaText", "Button label"], ["ctaHref", "Button link", "url"]].map(([field, label, type]) => <label className="field" key={field}>{label}<input type={type || "text"} value={item[field] || ""} onChange={event => updateSectionItem(index, itemIndex, { [field]: event.target.value })} /></label>)}
+                    {renderMediaField({ label: "Item image", value: item.image, targetKey: `section-${index}-item-${itemIndex}-image`, onChange: value => updateSectionItem(index, itemIndex, { image: value }) })}
+                    {renderMediaField({ label: "Item video", value: item.video, targetKey: `section-${index}-item-${itemIndex}-video`, resourceType: "video", onChange: value => updateSectionItem(index, itemIndex, { video: value }) })}
+                  </div>
+                </div>)}
               </div>
             </article>) : <div className="empty"><p>No sections yet. Add one to start building the page.</p></div>}
           </section>
@@ -240,23 +328,16 @@ export default function LandingPageEditor() {
       </div>
 
       <aside className="panel landing-preview-panel">
-        <div className="landing-preview-top"><span>Preview</span><small>Draft content</small></div>
-        {logo && <img className="landing-preview-logo" src={logo} alt="Organization logo" />}
-        <small>{content.organization || "Organization name"}</small>
-        <h2>{previewTitle || "Landing page headline"}</h2>
-        <p>{content.heroDescription || "Your hero description will appear here."}</p>
-        <div className="landing-preview-contact"><b>Contact</b><span>{content.supportEmail || "Support email"}</span><span>{content.phone || "Phone"}</span><span>{content.address || "Address"}</span></div>
-        {previewSections.map((section, index) => <article className="landing-preview-section" key={`preview-${index}`}>
-          {section.image && <img src={section.image} alt="" />}
-          <small>{section.type || "content"}</small>
-          <h3>{section.title || "Section heading"}</h3>
-          <p>{section.description || "Section description"}</p>
-          {section.mediaUrl && <video src={section.mediaUrl} controls />}
-        </article>)}
-        {courses.length > 0 && <div className="landing-preview-list"><b>Courses ({courses.length})</b>{courses.slice(0, 3).map((item, index) => <span key={`preview-course-${index}`}>{item.title || "Untitled course"}</span>)}</div>}
-        {videos.length > 0 && <div className="landing-preview-list"><b>Videos ({videos.length})</b>{videos.slice(0, 3).map((item, index) => <span key={`preview-video-${index}`}>{item.title || "Untitled video"}</span>)}</div>}
-        {testimonials.length > 0 && <div className="landing-preview-list"><b>Testimonials ({testimonials.length})</b>{testimonials.slice(0, 3).map((item, index) => <span key={`preview-testimonial-${index}`}>{item.name || "Unnamed"}: {item.quote || ""}</span>)}</div>}
+        <div className="landing-preview-top"><span>Website preview</span><button type="button" className="secondary" onClick={() => { setPreviewSource("draft"); setFrameReady(false); setPreviewOpen(true); }}><Eye size={15} /> Preview actual page</button></div>
+        <p className="landing-preview-help">Preview uses the same landing page component as the learner website. Switch between your draft, the original default page, and the published version.</p>
+        <div className="landing-preview-choices"><button type="button" onClick={() => { setPreviewSource("draft"); setFrameReady(false); setPreviewOpen(true); }}>Preview draft</button><button type="button" onClick={() => { setPreviewSource("default"); setFrameReady(false); setPreviewOpen(true); }}>Show default page</button></div>
       </aside>
     </div>
+    {previewOpen && <div className="landing-preview-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPreviewOpen(false); }}>
+      <section className="landing-preview-dialog" role="dialog" aria-modal="true" aria-label="Landing page draft preview">
+        <header><div><b>Landing page preview</b><small>{previewSource === "draft" ? "Unsaved draft" : previewSource === "default" ? "Original default page" : "Published page"} · {previewMode === "desktop" ? "Desktop" : "Mobile"} view</small></div><div className="landing-preview-controls"><button type="button" aria-pressed={previewMode === "desktop"} onClick={() => setPreviewMode("desktop")}><Monitor size={16} /> Desktop</button><button type="button" aria-pressed={previewMode === "mobile"} onClick={() => setPreviewMode("mobile")}><Smartphone size={16} /> Mobile</button><button type="button" aria-pressed={previewSource === "draft"} onClick={() => setPreviewSource("draft")}>Draft</button><button type="button" aria-pressed={previewSource === "default"} onClick={() => setPreviewSource("default")}>Default</button><button type="button" aria-pressed={previewSource === "published"} onClick={() => setPreviewSource("published")}>Published</button><button type="button" aria-label="Close preview" onClick={() => { setPreviewOpen(false); setFrameReady(false); }}><X size={18} /></button></div></header>
+        <div className={`landing-preview-canvas ${previewMode}`}>{previewUrl ? <iframe ref={previewFrame} title="Actual public landing page preview" src={previewUrl} /> : <p className="landing-preview-unavailable">Set VITE_PUBLIC_SITE_URL to the client site URL to preview the actual landing page.</p>}</div>
+      </section>
+    </div>}
   </section>;
 }

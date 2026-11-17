@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Crown, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { writeDemo } from "../services/localStore";
 import { login as apiLogin } from "../services/auth";
+import { apiClient } from "../services/api";
 import logo from "../../assets/logo.jpeg";
 
 const roles = {
@@ -10,11 +11,27 @@ const roles = {
   "super-admin": { label: "Super Admin", path: "/super-admin", Icon: Crown, description: "Manage the platform, administrators and operations." },
 };
 
+function BrandLogo() {
+  const [brand, setBrand] = useState({});
+  useEffect(() => {
+    let active = true;
+    const onUpdate = event => setBrand(event.detail || {});
+    window.addEventListener("pel-branding-updated", onUpdate);
+    apiClient.get("/api/landing").then(response => {
+      if (active) setBrand(response.data?.data?.content || {});
+    }).catch(() => {});
+    return () => { active = false; window.removeEventListener("pel-branding-updated", onUpdate); };
+  }, []);
+  const image = typeof brand.logo === "string" ? brand.logo : brand.logo?.url || logo;
+  const name = [brand.brandFirst, brand.brandSecond].filter(Boolean).join(" ") || "Prime Easy Learn";
+  return <img src={image} alt={name} />;
+}
+
 export function LoginChooser() {
   return (
     <main className="login-page">
       <section className="login-wrap">
-        <Link to="/" className="login-brand"><img src={logo} alt="Prime Easy Learn" /></Link>
+        <Link to="/" className="login-brand"><BrandLogo /></Link>
         <p className="login-eyebrow">Secure workspace</p>
         <h1>Choose your sign in</h1>
         <p className="login-intro">Select your account type to continue to the right workspace.</p>
@@ -74,7 +91,7 @@ export default function AdminLoginPage() {
   return <main className="login-page"><section className="login-card">
     <Link to="/" className="login-back"><ArrowLeft size={16} /> All login options</Link>
     <div className="login-heading-icon"><Icon size={25} /></div>
-    <Link to="/" className="login-brand"><img src={logo} alt="Prime Easy Learn" /></Link>
+    <Link to="/" className="login-brand"><BrandLogo /></Link>
     <h1>{role.label} Login</h1>
     <p className="login-intro">Sign in with your {role.label.toLowerCase()} account to continue.</p>
     <form onSubmit={submit}>
