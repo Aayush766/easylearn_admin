@@ -15,7 +15,15 @@ apiClient.interceptors.request.use(request => {
   // Access tokens should live in memory (or be supplied by the auth context),
   // never in localStorage/sessionStorage.
   const accessToken = window.__PEL_ACCESS_TOKEN__;
-  if (accessToken) request.headers.Authorization = `Bearer ${accessToken}`;
+  // Refresh authenticates with the HTTP-only refresh cookie. Sending the
+  // (possibly expired) access token here can make the server reject refresh
+  // before it checks that cookie.
+  const isRefreshRequest = request.url?.replace(/\/$/, "").endsWith("/api/auth/refresh");
+  if (isRefreshRequest) {
+    delete request.headers.Authorization;
+  } else if (accessToken) {
+    request.headers.Authorization = `Bearer ${accessToken}`;
+  }
   return request;
 });
 

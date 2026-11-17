@@ -18,10 +18,10 @@ import EnrollmentsPage from "./admin/pages/EnrollmentsPage";
 import RenewalsPage from "./admin/pages/RenewalsPage";
 import AssessmentsPage from "./admin/pages/AssessmentsPage";
 import ResultsPage from "./admin/pages/ResultsPage";
-import AttendancePage from "./admin/pages/AttendancePage";
 import CertificatesPage from "./admin/pages/CertificatesPage";
 import AdminManagementPage from "./admin/pages/AdminManagementPage";
 import LandingPageEditor from "./admin/pages/LandingPageEditor";
+import AttendancePage from "./admin/pages/AttendancePage";
 import AdminLoginPage, { LoginChooser } from "./admin/pages/AdminLoginPage";
 import { me, refresh } from "./admin/services/auth";
 
@@ -34,6 +34,7 @@ const operational = [
   ["trainers", TrainersPage],
   ["trainer-assignment", TrainerAssignmentPage],
   ["enrollments", EnrollmentsPage],
+  ["attendance", AttendancePage],
   ["renewals", RenewalsPage],
   ["assessments", AssessmentsPage],
   ["results", ResultsPage],
@@ -61,7 +62,6 @@ function AdminRoutes({ superAdmin = false }) {
     <AdminLayout isSuperAdmin={superAdmin}>
       <Routes>
         <Route index element={<DashboardPage isSuperAdmin={superAdmin} />} />
-        <Route path="attendance" element={<AttendancePage />} />
         {operational.map(([path, Component]) => <Route key={path} path={path} element={<Component />} />)}
         <Route path="reports" element={<ReportsPage />} />
         {!superAdmin && communication.map(([path, Component]) => <Route key={path} path={path} element={<Component />} />)}

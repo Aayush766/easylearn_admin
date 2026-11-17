@@ -16,7 +16,7 @@ import { apiClient } from "../services/api";
 const searchableEntities = [
   ["courses", "Courses", "title"], ["categories", "Categories", "name"], ["modules", "Modules & Lessons", "title"],
   ["learners", "Learners", "name"], ["trainers", "Trainers", "name"], ["trainer-assignment", "Trainer Assignment", "trainer"],
-  ["enrollments", "Enrollments", "learner"], ["attendance", "Attendance", "learner"], ["renewals", "Extension & Renewal", "learner"], ["assessments", "Assessments", "title"],
+  ["enrollments", "Enrollments", "learner"], ["renewals", "Extension & Renewal", "learner"], ["assessments", "Assessments", "title"],
   ["results", "Results", "learner"], ["certificates", "Certificates", "learner"], ["admins", "Admins", "name"],
   ["billing", "Billing", "invoiceNumber"], ["audit-logs", "Audit Logs", "description"], ["notifications", "Notifications", "title"],
 ];
@@ -28,7 +28,7 @@ const coreNavigation = [
   ["Learners", "learners", Users],
   ["Trainers", "trainers", GraduationCap],
   ["Enrollments", "enrollments", ClipboardCheck],
-  ["Attendance", "attendance", CalendarClock],
+  ["Attendance", "attendance", ClipboardCheck],
   ["Assessments", "assessments", FileQuestion],
   ["Results", "results", ChartNoAxesCombined],
   ["Certificates", "certificates", FileBadge2],
@@ -53,6 +53,7 @@ const superNavigation = [
   ["Branding", "branding", Palette],
   // ["Billing", "billing", CreditCard],
   // ["Platform Settings", "settings", Settings2],
+  // ["Branding", "branding", Palette],
   // ["Audit Logs", "audit-logs", History],
 ];
 
@@ -81,22 +82,23 @@ function NavGroup({ title, items, base, onNavigate }) {
 export default function AdminLayout({ children, isSuperAdmin = false }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [brand, setBrand] = useState({});
+  const [branding, setBranding] = useState({});
   const navigate = useNavigate();
   const location = useLocation();
   const base = isSuperAdmin ? "/super-admin" : "/admin";
   useEffect(() => {
     let active = true;
-    const handleBrandUpdate = event => setBrand(event.detail || {});
-    window.addEventListener("pel-branding-updated", handleBrandUpdate);
-    apiClient.get("/api/landing").then(response => {
-      const content = response.data?.data?.content || {};
-      if (active) setBrand(content);
+    const refreshBranding = () => apiClient.get("/api/landing").then(response => {
+      if (active) setBranding(response.data?.data?.content || {});
     }).catch(() => {});
-    return () => { active = false; window.removeEventListener("pel-branding-updated", handleBrandUpdate); };
+    refreshBranding();
+    window.addEventListener("landing-content-updated", refreshBranding);
+    return () => { active = false; window.removeEventListener("landing-content-updated", refreshBranding); };
   }, []);
-  const brandLogo = typeof brand.logo === "string" ? brand.logo : brand.logo?.url || logo;
-  const brandName = [brand.brandFirst, brand.brandSecond].filter(Boolean).join(" ") || "Prime Easy Learn";
+  useEffect(() => {
+    if (/^#[\da-f]{6}$/i.test(branding.primaryColor || "")) document.documentElement.style.setProperty("--primary", branding.primaryColor);
+  }, [branding.primaryColor]);
+  const logoUrl = typeof branding.logo === "string" ? branding.logo : branding.logo?.url;
   const searchResults = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (term.length < 2) return [];
@@ -124,8 +126,8 @@ export default function AdminLayout({ children, isSuperAdmin = false }) {
       <aside className={`admin-sidebar${open ? " is-open" : ""}`}>
         <div className="admin-brand-wrap">
           <Link to={base} className="admin-brand">
-            <img src={brandLogo} alt={brandName} />
-            <span><b>{brandName}</b><small>{isSuperAdmin ? "Super Admin Console" : "Admin Console"}</small></span>
+            <img src={logoUrl || logo} alt={branding.organization || "Prime Easy Learn"} />
+            <span><b>{branding.organization || "Prime Easy Learn"}</b><small>{isSuperAdmin ? "Super Admin Console" : "Admin Console"}</small></span>
           </Link>
           <button className="admin-close" aria-label="Close navigation" onClick={() => setOpen(false)}><X size={18} /></button>
         </div>
